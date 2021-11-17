@@ -14,6 +14,24 @@
  * Состоит из длинной инициализации и одного обработчика прерывания. Ну и пары
  * функций записывающих в регистры сравнения сколько элементов шкалы отобразить.
  */
+
+#define SMOOTH
+/*
+ * В исходной версии анодные таймеры тактировались от катодных так, что число
+ * загруженное в регистр сравнения совпадало с числом светящихся катодов. Но так
+ * как реакция на выключение анодного напряжения происходит после переключения
+ * катодов, наличествует нежелательная подсветка следующего за последним активным
+ * сегментом. Поэтому в этом варианте таймер анодов тактируется от того же
+ * генератора что и катодные, только с частотой в 8 раз меньше, чтобы уложить
+ * весь период в 16 бит. В регистр сравнения анодного таймера надо теперь
+ * загружать не число сегментов, а время, сколько должна светиться шкала от
+ * начала развёртки. Таблица этих интервалов создаётся при иициализации. При этом
+ * функция загружающая регистр сравнения отнимает небольшую величину, чтобы
+ * анодное напряжение снималось за 5 микросекунд до переключения катодов.
+ * И так как вход тактирования анодного таймера по входу захвата больше
+ * не используется, нет надобности в двух таймерах.
+ */
+
 /*Simplified BSD License (FreeBSD License)
 Copyright (c) 2021, Vladimir Birjukov, All rights reserved.
 
@@ -142,6 +160,10 @@ uint16_t sequence[][5] = {
 };
 #define SEQUENCE_LINES  (sizeof(sequence)/sizeof(sequence[0]))
 
+#ifdef SMOOTH
+uint16_t channel_durations[SEQUENCE_LINES * 4], ch_durations_last = 0;
+#endif
+
 void TIMER1_IRQHandler(void) {
   static unsigned int line = SEQUENCE_LINES-1;
   if (TIMER1->IF & TIMER_IF_OF) {
@@ -161,13 +183,24 @@ void TIMER1_IRQHandler(void) {
 
 
 void Timer_Init(void) {
+  uint32_t current_duration = 0;
+  uint16_t *duration_ptr = channel_durations;
+  for (unsigned int ii = 0; ii < (SEQUENCE_LINES * 4); ii++) {
+      if (sequence[ii / 4][ii % 4]) {
+          *duration_ptr++ = (current_duration + sequence[ii / 4][ii % 4]) / 8;
+          ch_durations_last++;
+      }
+      if ((ii % 4) == 3) current_duration += sequence[ii / 4][3];
+  }
 
   CMU_ClockEnable(cmuClock_GPIO, 1);
   CMU_ClockEnable(cmuClock_PRS, 1);
   CMU_ClockEnable(cmuClock_TIMER1, 1);
   CMU_ClockEnable(cmuClock_TIMER2, 1);
   CMU_ClockEnable(cmuClock_TIMER3, 1);
+#ifndef SMOOTH
   CMU_ClockEnable(cmuClock_TIMER4, 1);
+#endif
 
   GPIO_PinModeSet(gpioPortB, 0, gpioModePushPull, 0); // анод левого канала
   GPIO_PinModeSet(gpioPortB, 1, gpioModePushPull, 0); // анод правого канала
@@ -177,6 +210,7 @@ void Timer_Init(void) {
   GPIO_PinModeSet(gpioPortC, 0, gpioModePushPull, 0); // катод 1 фазы
   GPIO_PinModeSet(gpioPortC, 1, gpioModePushPull, 0); // катод 2 фазы
 
+#ifndef SMOOTH
   // *********************************************************************
   // Конфигурация счетчиков, управляющих анодами индикатора
   // Timer2 - левый, Timer4 - правый. СС0 - у обоих сконфигурирован как сброс,
@@ -211,7 +245,24 @@ void Timer_Init(void) {
   TIMER4->TOP = SEQUENCE_LINES*3;
   TIMER4->CTRL = TIMER_CTRL_RISEA_RELOADSTART;
   TIMER4->CC[1].CTRL = TIMER_CC_CTRL_ICEDGE_FALLING;
+#else
+  // *********************************************************************
+  // Конфигурация счетчика, управляющего анодами индикатора
+  // СС0 - сконфигурирован как сброс,
+  // CC1 - выход ШИМ левый, CC2 - выход ШИМ правый
+  // *********************************************************************
+  TIMER2->CFG = TIMER_CFG_MODE_UP | TIMER_CFG_SYNC_DISABLE |
+                TIMER_CFG_DISSYNCOUT_DIS | TIMER_CFG_DEBUGRUN |
+                TIMER_CFG_CLKSEL_PRESCEM01GRPACLK | TIMER_CFG_PRESC_DIV16;
+  TIMER2->CC[0].CFG = TIMER_CC_CFG_MODE_INPUTCAPTURE |
+                      TIMER_CC_CFG_INSEL_PRSASYNCLEVEL ;
+  TIMER2->CC[1].CFG = TIMER_CC_CFG_MODE_PWM | TIMER_CC_CFG_PRSCONF_LEVEL;
+  TIMER2->CC[2].CFG = TIMER_CC_CFG_MODE_PWM | TIMER_CC_CFG_PRSCONF_LEVEL;
 
+  TIMER2->EN = TIMER_EN_EN;
+  TIMER2->TOP =  *(--duration_ptr) ;
+  TIMER2->CTRL = TIMER_CTRL_RISEA_RELOADSTART;
+#endif
 
   // *********************************************************************
   // Генератор последовательности фаз для катодов
@@ -220,10 +271,15 @@ void Timer_Init(void) {
   TIMER1->CFG = TIMER_CFG_PRESC_DIV2 | TIMER_CFG_MODE_UP |
                 TIMER_CFG_SYNC_DISABLE | TIMER_CFG_DISSYNCOUT_EN |
                 TIMER_CFG_DEBUGRUN;
+#ifndef SMOOTH
   TIMER1->CC[0].CFG = TIMER_CC_CFG_MODE_PWM | TIMER_CC_CFG_PRSCONF_PULSE;
   TIMER1->CC[1].CFG = TIMER_CC_CFG_MODE_PWM | TIMER_CC_CFG_PRSCONF_PULSE;
   TIMER1->CC[2].CFG = TIMER_CC_CFG_MODE_PWM | TIMER_CC_CFG_PRSCONF_PULSE;
-
+#else
+  TIMER1->CC[0].CFG = TIMER_CC_CFG_MODE_PWM | TIMER_CC_CFG_PRSCONF_LEVEL;
+  TIMER1->CC[1].CFG = TIMER_CC_CFG_MODE_PWM | TIMER_CC_CFG_PRSCONF_LEVEL;
+  TIMER1->CC[2].CFG = TIMER_CC_CFG_MODE_PWM | TIMER_CC_CFG_PRSCONF_LEVEL;
+#endif
   TIMER1->EN = TIMER_EN_EN;
   TIMER1->TOP = sequence[0][3];
   TIMER1->TOPB = sequence[1][3];
@@ -281,6 +337,7 @@ void Timer_Init(void) {
                           PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER3 |
                           PRS_ASYNC_CH_CTRL_SIGSEL_TIMER3CC0;
 
+#ifndef SMOOTH
   PRS->ASYNC_CH[1].CTRL = PRS_ASYNC_CH_CTRL_FNSEL_A_OR_B |
                           PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
                           PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC1 |
@@ -295,7 +352,7 @@ void Timer_Init(void) {
                           PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
                           PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC0 |
                           (0x00008UL << 24) ;
-
+#endif
   // *********************************************************************
   // Формирование выходных сигналов выбора катодов.
   // Входные сигналы: PWM выходы Timer1 на выводах порта B 2 - 4
@@ -303,7 +360,7 @@ void Timer_Init(void) {
   // Канал 10: ИЛИ-НЕ Timer1CC0 и пятого канала (PWM Timer1CC1)
   // Канал 11: ИЛИ-НЕ порта B1 (PWM Timer1CC2) и инверсии пятого канала (PWM Timer1CC1)
   // *********************************************************************
-
+#ifndef SMOOTH
   GPIO_ExtIntConfig(gpioPortB, 2, 2, 0, 0, false);
   GPIO_ExtIntConfig(gpioPortB, 3, 3, 0, 0, false);
   GPIO_ExtIntConfig(gpioPortB, 4, 4, 0, 0, false);
@@ -322,12 +379,34 @@ void Timer_Init(void) {
                           PRS_ASYNC_CH_CTRL_SOURCESEL_GPIO |
                           PRS_ASYNC_CH_CTRL_SIGSEL_GPIOPIN4 |
                           (0x00005UL << 24);
+#else
+  PRS->ASYNC_CH[5].CTRL = PRS_ASYNC_CH_CTRL_AUXSEL_DEFAULT |
+                          PRS_ASYNC_CH_CTRL_FNSEL_A |
+                          PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
+                          PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC1;
 
+  PRS->ASYNC_CH[10].CTRL = PRS_ASYNC_CH_CTRL_FNSEL_A_NOR_B |
+                          PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
+                          PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC0 |
+                          (0x00005UL << 24);
+
+  PRS->ASYNC_CH[11].CTRL = PRS_ASYNC_CH_CTRL_FNSEL_NOT_A_AND_B |
+                          PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
+                          PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC2 |
+                          (0x00005UL << 24);
+#endif
   // выводим сигналы на контакты:
+#ifndef SMOOTH
   GPIO->TIMERROUTE[2].CC2ROUTE   = gpioPortB | (0ul << 16);
   GPIO->TIMERROUTE[4].CC2ROUTE   = gpioPortB | (1ul << 16);
   GPIO->TIMERROUTE[2].ROUTEEN = GPIO_TIMER_ROUTEEN_CC2PEN;
   GPIO->TIMERROUTE[4].ROUTEEN = GPIO_TIMER_ROUTEEN_CC2PEN;
+#else
+  GPIO->TIMERROUTE[2].CC1ROUTE   = gpioPortB | (0ul << 16);
+  GPIO->TIMERROUTE[2].CC2ROUTE   = gpioPortB | (1ul << 16);
+  GPIO->TIMERROUTE[2].ROUTEEN = GPIO_TIMER_ROUTEEN_CC1PEN |
+                                GPIO_TIMER_ROUTEEN_CC2PEN;
+#endif
 
   GPIO->PRSROUTE[0].ASYNCH10ROUTE   = gpioPortC | (0ul << 16);
   GPIO->PRSROUTE[0].ASYNCH11ROUTE   = gpioPortC | (1ul << 16);
@@ -338,18 +417,21 @@ void Timer_Init(void) {
   // *********************************************************************
 
   PRS->CONSUMER_TIMER2_CC0 = 2;
-  PRS->CONSUMER_TIMER2_CC1 = 3;
-
   PRS->CONSUMER_TIMER4_CC0 = 2;
+#ifndef SMOOTH
+  PRS->CONSUMER_TIMER2_CC1 = 3;
   PRS->CONSUMER_TIMER4_CC1 = 3;
+#endif
 
 // Запускаем в работу.
   TIMER2->CMD = TIMER_CMD_START;
+#ifndef SMOOTH
   TIMER4->CMD = TIMER_CMD_START;
+#endif
   TIMER1->CMD = TIMER_CMD_START;
 }
 
-
+#ifndef SMOOTH
 void show_left_scale(unsigned int element_count) {
   TIMER2->CC[2].OCB = element_count;
 }
@@ -357,3 +439,19 @@ void show_left_scale(unsigned int element_count) {
 void show_right_scale(unsigned int element_count) {
   TIMER4->CC[2].OCB = element_count;
 }
+#else
+void show_left_scale(unsigned int element_count) {
+  if (element_count >= ch_durations_last) {
+      element_count =  ch_durations_last - 1;
+  }
+  TIMER2->CC[1].OCB = (element_count) ? channel_durations[element_count-1] - 10 : 0;
+}
+
+void show_right_scale(unsigned int element_count) {
+  if (element_count >= ch_durations_last) {
+      element_count =  ch_durations_last - 1;
+  }
+  TIMER2->CC[2].OCB = (element_count) ? channel_durations[element_count-1] - 10 : 0;
+}
+
+#endif
