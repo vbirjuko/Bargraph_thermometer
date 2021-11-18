@@ -36,32 +36,6 @@
 #include "common/client.h"
 #include "common/server.h"
 
-// The advertising set handle allocated from Bluetooth stack.
-// static uint8_t advertising_set_handle = 0xff;
-
-/**************************************************************************//**
- * Application Init.
- *****************************************************************************/
-SL_WEAK void app_init(void)
-{
-  /////////////////////////////////////////////////////////////////////////////
-  // Put your additional application init code here!                         //
-  // This is called once during start-up.                                    //
-  /////////////////////////////////////////////////////////////////////////////
-}
-
-/**************************************************************************//**
- * Application Process Action.
- *****************************************************************************/
-SL_WEAK void app_process_action(void)
-{
-  /////////////////////////////////////////////////////////////////////////////
-  // Put your additional application code here!                              //
-  // This is called infinitely.                                              //
-  // Do not call blocking functions from here!                               //
-  /////////////////////////////////////////////////////////////////////////////
-}
-
 /**************************************************************************//**
  * Bluetooth stack event handler.
  * This overrides the dummy weak implementation.
