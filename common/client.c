@@ -6,7 +6,7 @@
  *
  *
  * Модуль обеспечивает сканирование BT устройств. При нахождении пакета от
- * сохранённого в EEPROM адреса, если сервер non-connectable то ищется поле
+ * сохранённого в EEPROM адреса, если сервер non-connectable, то ищется поле
  * manufacturer-specific data и оттуда забирается температура, которая
  * передаётся на отображение. Одновременно запускается таймер, по истечении
  * которого соответствующая шкала гасится. Таймер перезапускается с каждым
@@ -110,8 +110,9 @@ static uint16_t gatt_result;
 
 sl_sleeptimer_timer_handle_t left_channel, right_channel, connection_timeout;
 uint32_t left_data = 0, right_data = 1;
+uint16_t voltage[2] = {5, 5};
 
-void not_connented_in_time(sl_sleeptimer_timer_handle_t *handle, void *timer_data);
+void not_connected_in_time(sl_sleeptimer_timer_handle_t *handle, void *timer_data);
 void timer_callback(sl_sleeptimer_timer_handle_t *handle, void *timer_data);
 void timer_stop(sl_sleeptimer_timer_handle_t *handle, void *timer_data);
 
@@ -160,6 +161,10 @@ void client_on_event(sl_bt_msg_t *evt) {
                               offset += (beacon_adv_data[offset] + 1);  // go to next
                               continue;
                           } else {
+                              if (beacon_adv_data[offset+1] > 7) { // поле достаточной длины, чтобы содержать информацию о
+                                                                    // напряжении источника питания
+                                  voltage[ii] =  *(int16_t*) (&beacon_adv_data[offset + 8]);
+                              }
                               offset += 4;
                               app_log("data size %02x: offset=%02x: %02x%02x%02x%02x\r\n", data_size, offset, beacon_adv_data[offset+0], beacon_adv_data[offset+1], beacon_adv_data[offset+2], beacon_adv_data[offset+3]);
                               remote_temperature = *(int16_t*) (&beacon_adv_data[offset + (data[ii].offset << 1)]);
@@ -195,7 +200,7 @@ void client_on_event(sl_bt_msg_t *evt) {
                             evt->data.evt_scanner_scan_report.address.addr[0]);
                     sc = sl_bt_scanner_stop();
                     app_log("Scanning stopped\r\n");
-                    sl_sleeptimer_start_timer_ms(&connection_timeout, 20000, &not_connented_in_time, NULL, 3, 0);
+                    sl_sleeptimer_start_timer_ms(&connection_timeout, 20000, &not_connected_in_time, NULL, 3, 0);
 //                  sl_bt_system_set_soft_timer(20ul*32768, 2, 1);
                     active_connection_num = ii;
                     sc = sl_bt_connection_open(data[ii].mac_addr,
@@ -212,16 +217,18 @@ void client_on_event(sl_bt_msg_t *evt) {
 
     case sl_bt_evt_connection_opened_id:
       app_log("Connection_opened_id\r\n");
-      if (conn_state == opening) {
-//        sl_bt_system_set_soft_timer(0, 2, 1); // disable timer
-          sl_sleeptimer_stop_timer(&connection_timeout);  //disable timer
-        conn_properties[active_connection_num].connection_handle = evt->data.evt_connection_opened.connection;
-        required_connections_num-- ;
-        conn_state = discover_services;
-        sc = sl_bt_gatt_discover_primary_services_by_uuid(conn_properties[active_connection_num].connection_handle,
-                                                     sizeof(service_UUID), service_UUID);
-        app_log("Start services discovery\r\n");
-        app_assert(sc == SL_STATUS_OK, "[E: 0x%04x] sl_bt_gatt_discovery primary services %d\n", (int)sc, active_connection_num);
+      if (evt->data.evt_connection_opened.master) {
+          if (conn_state == opening) {
+//          sl_bt_system_set_soft_timer(0, 2, 1); // disable timer
+            sl_sleeptimer_stop_timer(&connection_timeout);  //disable timer
+            conn_properties[active_connection_num].connection_handle = evt->data.evt_connection_opened.connection;
+            required_connections_num-- ;
+            conn_state = discover_services;
+            sc = sl_bt_gatt_discover_primary_services_by_uuid(conn_properties[active_connection_num].connection_handle,
+                                                         sizeof(service_UUID), service_UUID);
+            app_log("Start services discovery\r\n");
+            app_assert(sc == SL_STATUS_OK, "[E: 0x%04x] sl_bt_gatt_discovery primary services %d\n", (int)sc, active_connection_num);
+        }
       }
       break;
 
@@ -421,7 +428,7 @@ void timer_callback(sl_sleeptimer_timer_handle_t *handle, void *timer_data) {
   app_log("Set Sleep Timer tick = %10d sc = %02x\r\n", tick, sc);
 }
 
-void not_connented_in_time(sl_sleeptimer_timer_handle_t *handle, void *timer_data) {
+void not_connected_in_time(sl_sleeptimer_timer_handle_t *handle, void *timer_data) {
   sl_status_t sc;
   (void) handle;
   (void) timer_data;
@@ -441,9 +448,11 @@ void timer_stop(sl_sleeptimer_timer_handle_t *handle, void *timer_data) {
   (void) handle;
   if (*(uint32_t*)timer_data == 0) {
       show_temp(ABSOLUTE_ZERO*2, 0);
+      voltage[0] = 5;
       if (device_mode & DEVICE_MODE_SAME) show_temp(ABSOLUTE_ZERO*2, 1);
   }
   if (*(uint32_t*)timer_data == 1) {
       show_temp(ABSOLUTE_ZERO*2, 1);
+      voltage[1] = 5;
   }
 }

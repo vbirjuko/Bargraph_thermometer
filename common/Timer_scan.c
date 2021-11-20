@@ -334,8 +334,8 @@ void Timer_Init(void) {
 
   PRS->ASYNC_CH[2].CTRL = PRS_ASYNC_CH_CTRL_AUXSEL_DEFAULT |
                           PRS_ASYNC_CH_CTRL_FNSEL_A |
-                          PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER3 |
-                          PRS_ASYNC_CH_CTRL_SIGSEL_TIMER3CC0;
+                          PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
+                          PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC0;
 
 #ifndef SMOOTH
   PRS->ASYNC_CH[1].CTRL = PRS_ASYNC_CH_CTRL_FNSEL_A_OR_B |
