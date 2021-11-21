@@ -29,7 +29,8 @@
  * функция загружающая регистр сравнения отнимает небольшую величину, чтобы
  * анодное напряжение снималось за 5 микросекунд до переключения катодов.
  * И так как вход тактирования анодного таймера по входу захвата больше
- * не используется, нет надобности в двух таймерах.
+ * не используется, нет надобности в двух таймерах управления анодами, как и
+ * в TIMER3 для сброса - TIMER1CC0 теперь может выполнять свою функцию.
  */
 
 /*Simplified BSD License (FreeBSD License)
@@ -171,9 +172,11 @@ void TIMER1_IRQHandler(void) {
     TIMER1->CC[0].OCB = sequence[line][0];
     TIMER1->CC[1].OCB = sequence[line][1];
     TIMER1->CC[2].OCB = sequence[line][2];
-    TIMER3->CC[0].OCB = sequence[line][4];
     TIMER1->TOPB = sequence[line][3];
+#ifndef SMOOTH
+    TIMER3->CC[0].OCB = sequence[line][4];
     TIMER3->TOPB = sequence[line][3];
+#endif
     if (++line >= SEQUENCE_LINES) {
         line = 0;
         scan_flag = 1;
@@ -197,8 +200,8 @@ void Timer_Init(void) {
   CMU_ClockEnable(cmuClock_PRS, 1);
   CMU_ClockEnable(cmuClock_TIMER1, 1);
   CMU_ClockEnable(cmuClock_TIMER2, 1);
-  CMU_ClockEnable(cmuClock_TIMER3, 1);
 #ifndef SMOOTH
+  CMU_ClockEnable(cmuClock_TIMER3, 1);
   CMU_ClockEnable(cmuClock_TIMER4, 1);
 #endif
 
@@ -298,6 +301,7 @@ void Timer_Init(void) {
   TIMER1->CC[1].OCB = sequence[1][1];
   TIMER1->CC[2].OCB = sequence[1][2];
 
+#ifndef SMOOTH
   TIMER3->CFG = TIMER_CFG_PRESC_DIV2 | TIMER_CFG_MODE_UP |
                 TIMER_CFG_SYNC_ENABLE | TIMER_CFG_DISSYNCOUT_DIS |
                 TIMER_CFG_DEBUGRUN;
@@ -308,6 +312,7 @@ void Timer_Init(void) {
   TIMER3->CNT = 0;
   TIMER3->CC[0].OC = sequence[0][4];
   TIMER3->CC[0].OCB = sequence[1][4];
+#endif
 
   GPIO->TIMERROUTE[1].ROUTEEN = GPIO_TIMER_ROUTEEN_CC0PEN |
                                 GPIO_TIMER_ROUTEEN_CC1PEN |
@@ -320,7 +325,7 @@ void Timer_Init(void) {
   NVIC_SetPriority(TIMER1_IRQn, 2);
   NVIC_EnableIRQ(TIMER1_IRQn);
 
-
+#ifndef SMOOTH
   // *********************************************************************
   // Соединяем ведущий таймер 1 и 3 с ведомыми 2 и 4:
   // PRS канал 2 - сигнал CC0 Timer3
@@ -331,13 +336,11 @@ void Timer_Init(void) {
   // Теперь тут собраны все сигналы по лог.ИЛИ для подачи счетных импульсов
   // на CC1 таймеров 2 и 4
   // *********************************************************************
-
   PRS->ASYNC_CH[2].CTRL = PRS_ASYNC_CH_CTRL_AUXSEL_DEFAULT |
                           PRS_ASYNC_CH_CTRL_FNSEL_A |
-                          PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
-                          PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC0;
+                          PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER3 |
+                          PRS_ASYNC_CH_CTRL_SIGSEL_TIMER3CC0;
 
-#ifndef SMOOTH
   PRS->ASYNC_CH[1].CTRL = PRS_ASYNC_CH_CTRL_FNSEL_A_OR_B |
                           PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
                           PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC1 |
@@ -352,6 +355,12 @@ void Timer_Init(void) {
                           PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
                           PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC0 |
                           (0x00008UL << 24) ;
+#else
+  PRS->ASYNC_CH[2].CTRL = PRS_ASYNC_CH_CTRL_AUXSEL_DEFAULT |
+                          PRS_ASYNC_CH_CTRL_FNSEL_A |
+                          PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER1 |
+                          PRS_ASYNC_CH_CTRL_SIGSEL_TIMER1CC0;
+
 #endif
   // *********************************************************************
   // Формирование выходных сигналов выбора катодов.

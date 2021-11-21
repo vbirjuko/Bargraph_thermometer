@@ -93,13 +93,14 @@ void app_init(void)
 
 
   CMU_ClockEnable(cmuClock_GPIO, 1);
-  GPIO_PinModeSet(gpioPortA, 4, gpioModePushPull, 0);
+
   GPIO_PinModeSet(KEY_PORT, KEY_PIN, gpioModeInputPull, 1);
-  GPIO_PinModeSet(gpioPortC, 6, gpioModePushPull, 0);
-  GPIO_PinModeSet(gpioPortC, 5, gpioModePushPull, 0);
-  GPIO_PinModeSet(gpioPortC, 4, gpioModePushPull, 0);
-  GPIO_PinModeSet(gpioPortC, 3, gpioModePushPull, 0);
-  GPIO_PinModeSet(gpioPortC, 2, gpioModePushPull, 0);
+  GPIO_PinModeSet(LED_ACCESS_PORT, LED_ACCESS_PIN, gpioModePushPull, 0);
+  GPIO_PinModeSet(LED_CONNECT_PORT, LED_CONNECT_PIN, gpioModePushPull, 0);
+  GPIO_PinModeSet(LED_FN1_PORT, LED_FN1_PIN, gpioModePushPull, 0);
+  GPIO_PinModeSet(LED_FN2_PORT, LED_FN2_PIN, gpioModePushPull, 0);
+  GPIO_PinModeSet(LED_FN3_PORT, LED_FN3_PIN, gpioModePushPull, 0);
+  GPIO_PinModeSet(LED_FN4_PORT, LED_FN4_PIN, gpioModePushPull, 0);
   Timer_Init();
 #ifdef OLED_I2C
   i2c_master_init();
@@ -226,7 +227,7 @@ void server_on_event(sl_bt_msg_t *evt)
 
       // Do not start advertise if button not pressed.
       if (GPIO_PinInGet(KEY_PORT, KEY_PIN) == 0) {
-        GPIO_PinOutSet(gpioPortC, 6);
+        GPIO_PinOutSet(LED_ACCESS_PORT, LED_ACCESS_PIN);
         sl_bt_sm_delete_bondings();               // if BUTTON1 is pressed
         app_log("All bondings are erased.\r\n");
 
@@ -245,7 +246,7 @@ void server_on_event(sl_bt_msg_t *evt)
     // This event indicates that a new connection was opened.
     case sl_bt_evt_connection_opened_id:
       if (evt->data.evt_connection_opened.master == 0) {
-          GPIO_PinOutSet(gpioPortC, 5);
+          GPIO_PinOutSet(LED_CONNECT_PORT, LED_CONNECT_PIN);
           server_connection_handle = evt->data.evt_connection_opened.connection;
       }
       break;
@@ -254,8 +255,8 @@ void server_on_event(sl_bt_msg_t *evt)
     // This event indicates that a connection was closed.
     case sl_bt_evt_connection_closed_id:
       if (evt->data.evt_connection_closed.connection == server_connection_handle) {
-          GPIO_PinOutClear(gpioPortC, 5);
-          GPIO_PinOutClear(gpioPortC, 6);
+          GPIO_PinOutClear(LED_CONNECT_PORT, LED_CONNECT_PIN);
+          GPIO_PinOutClear(LED_ACCESS_PORT, LED_ACCESS_PIN);
       }
       break;
 
