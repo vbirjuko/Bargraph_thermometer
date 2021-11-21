@@ -8,11 +8,36 @@
 #ifndef CONFIGURATION_H_
 #define CONFIGURATION_H_
 
+//#define PREV_VERSION
+
 // Определение, где находится кнопка переводящая устройство
 // в режим конфигурации.
 #define KEY_PORT  gpioPortC
 #define KEY_PIN   7
 
+// Светодиоды, для индикации разных режимов
+// Зажигается, если устройство доступно для конфигурирования
+#define LED_ACCESS_PORT  gpioPortC
+#define LED_ACCESS_PIN   6
+// Зажигается, если устройство имеет соединение с конфигуратором
+#define LED_CONNECT_PORT  gpioPortC
+#define LED_CONNECT_PIN   5
+
+#define LED_FN1_PORT  gpioPortC
+#define LED_FN1_PIN   4
+#define LED_FN2_PORT  gpioPortC
+#define LED_FN2_PIN   3
+#define LED_FN3_PORT  gpioPortC
+#define LED_FN3_PIN   2
+#define LED_FN4_PORT  gpioPortA
+#define LED_FN4_PIN   4
+
+#ifdef PREV_VERSION
+#undef  KEY_PIN
+#define KEY_PIN   6
+#undef  LED_ACCESS_PIN
+#define LED_ACCESS_PIN   7
+#endif
 
 // Цена одного элемента шкалы пол-градуса или градус
 // откомментировать одну строчку
