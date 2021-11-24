@@ -175,14 +175,14 @@ void client_on_event(sl_bt_msg_t *evt) {
                               }
 #ifdef HALFDEGREE
                               show_temp(((remote_temperature < 0) ? remote_temperature-25 : remote_temperature+25)/50, ii);
-#elif  DEGREE
+#elif  defined(DEGREE)
                               show_temp(((remote_temperature < 0) ? remote_temperature-50 : remote_temperature+50)/100, ii);
 #endif
                               if ((device_mode & DEVICE_MODE_SAME) && (ii == 0)) {
                                   remote_temperature = *(int16_t*) (&beacon_adv_data[offset + (data[1].offset << 1)]);
 #ifdef HALFDEGREE
                                   show_temp(((remote_temperature < 0) ? remote_temperature-25 : remote_temperature+25)/50, 1);
-#elif  DEGREE
+#elif  defined(DEGREE)
                                   show_temp(((remote_temperature < 0) ? remote_temperature-50 : remote_temperature+50)/100, 1);
 #endif
                               }
@@ -378,13 +378,13 @@ void client_on_event(sl_bt_msg_t *evt) {
             app_log("Remote Temperature T=0x%04x\r\n", remote_temperature);
 #ifdef HALFDEGREE
             show_temp(((remote_temperature < 0) ? remote_temperature-25 : remote_temperature+25)/50, 0);
-#elif  DEGREE
+#elif  defined(DEGREE)
                 show_temp(((remote_temperature < 0) ? remote_temperature-50 : remote_temperature+50)/100, 0);
 #endif
             if (device_mode & DEVICE_MODE_SAME) {
 #ifdef HALFDEGREE
                 show_temp(((remote_temperature < 0) ? remote_temperature-25 : remote_temperature+25)/50, 1);
-#elif  DEGREE
+#elif  defined(DEGREE)
                 show_temp(((remote_temperature < 0) ? remote_temperature-50 : remote_temperature+50)/100, 1);
 #endif
             }
@@ -401,7 +401,7 @@ void client_on_event(sl_bt_msg_t *evt) {
             }
 #ifdef HALFDEGREE
             show_temp(((remote_temperature < 0) ? remote_temperature-25 : remote_temperature+25)/50, 1);
-#elif  DEGREE
+#elif  defined(DEGREE)
             show_temp(((remote_temperature < 0) ? remote_temperature-50 : remote_temperature+50)/100, 1);
 #endif
          }
